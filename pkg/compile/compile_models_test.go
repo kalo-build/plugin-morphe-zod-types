@@ -1,0 +1,409 @@
+package compile_test
+
+import (
+	"testing"
+
+	"github.com/kalo-build/morphe-go/pkg/registry"
+	"github.com/kalo-build/morphe-go/pkg/yaml"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
+	"github.com/stretchr/testify/suite"
+)
+
+type CompileModelsTestSuite struct {
+	suite.Suite
+}
+
+func TestCompileModelsTestSuite(t *testing.T) {
+	suite.Run(t, new(CompileModelsTestSuite))
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_BasicFields() {
+	model := yaml.Model{
+		Name: "User",
+		Fields: map[string]yaml.ModelField{
+			"ID": {
+				Type:       yaml.ModelFieldTypeAutoIncrement,
+				Attributes: []string{"mandatory"},
+			},
+			"Name": {
+				Type: yaml.ModelFieldTypeString,
+			},
+			"Email": {
+				Type: yaml.ModelFieldTypeString,
+			},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {
+				Fields: []string{"ID"},
+			},
+		},
+		Related: map[string]yaml.ModelRelation{},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+
+	suite.NoError(err)
+	suite.NotNil(schemas)
+	suite.Len(schemas, 2) // Main schema + primary identifier
+
+	// Check main schema
+	mainSchema := schemas[0]
+	suite.Equal("User", mainSchema.Name)
+	suite.Len(mainSchema.Fields, 3)
+
+	// ID should be mandatory (not optional)
+	idField := mainSchema.Fields[1]
+	suite.Equal("id", idField.Name)
+	suite.False(idField.Optional)
+
+	// Name and Email should be optional
+	emailField := mainSchema.Fields[0]
+	suite.Equal("email", emailField.Name)
+	suite.True(emailField.Optional)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AllFieldTypes() {
+	model := yaml.Model{
+		Name: "AllTypes",
+		Fields: map[string]yaml.ModelField{
+			"UUID":          {Type: yaml.ModelFieldTypeUUID},
+			"AutoIncrement": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"String":        {Type: yaml.ModelFieldTypeString},
+			"Integer":       {Type: yaml.ModelFieldTypeInteger},
+			"Float":         {Type: yaml.ModelFieldTypeFloat},
+			"Boolean":       {Type: yaml.ModelFieldTypeBoolean},
+			"Time":          {Type: yaml.ModelFieldTypeTime},
+			"Date":          {Type: yaml.ModelFieldTypeDate},
+			"Protected":     {Type: yaml.ModelFieldTypeProtected},
+			"Sealed":        {Type: yaml.ModelFieldTypeSealed},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"AutoIncrement"}},
+		},
+		Related: map[string]yaml.ModelRelation{},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+
+	suite.NoError(err)
+	suite.Len(schemas, 2)
+	suite.Len(schemas[0].Fields, 10)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_EnumField() {
+	model := yaml.Model{
+		Name: "Person",
+		Fields: map[string]yaml.ModelField{
+			"ID": {
+				Type:       yaml.ModelFieldTypeAutoIncrement,
+				Attributes: []string{"mandatory"},
+			},
+			"Nationality": {
+				Type: "Nationality",
+			},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{},
+	}
+
+	r := registry.NewRegistry()
+	r.SetEnum("Nationality", yaml.Enum{
+		Name: "Nationality",
+		Type: yaml.EnumTypeString,
+		Entries: map[string]any{
+			"US": "American",
+			"DE": "German",
+		},
+	})
+
+	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+
+	suite.NoError(err)
+	suite.Len(schemas, 2)
+
+	// Check that Nationality field has enum type
+	nationalityField := schemas[0].Fields[1]
+	suite.Equal("nationality", nationalityField.Name)
+
+	enumRef, ok := nationalityField.ZodType.(zoddef.ZodEnumRefType)
+	suite.True(ok)
+	suite.Equal("Nationality", enumRef.EnumName)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasOne() {
+	userModel := yaml.Model{
+		Name: "User",
+		Fields: map[string]yaml.ModelField{
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Profile": {Type: "HasOne"},
+		},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(userModel, r)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 3) // ID + ProfileID + Profile
+
+	// Check ProfileID field
+	profileIDField := schemas[0].Fields[1]
+	suite.Equal("profileID", profileIDField.Name)
+	suite.True(profileIDField.Optional)
+	suite.Equal(zoddef.ZodTypeNumber, profileIDField.ZodType)
+
+	// Check Profile field
+	profileField := schemas[0].Fields[2]
+	suite.Equal("profile", profileField.Name)
+	suite.True(profileField.Optional)
+
+	lazyType, ok := profileField.ZodType.(zoddef.ZodLazyType)
+	suite.True(ok)
+	suite.Equal("Profile", lazyType.TypeName)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasMany() {
+	companyModel := yaml.Model{
+		Name: "Company",
+		Fields: map[string]yaml.ModelField{
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Employee": {Type: "HasMany"},
+		},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(companyModel, r)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 3) // ID + EmployeeIDs + Employees
+
+	// Check EmployeeIDs field
+	employeeIDsField := schemas[0].Fields[1]
+	suite.Equal("employeeIDs", employeeIDsField.Name)
+	suite.True(employeeIDsField.Optional)
+
+	arrayType, ok := employeeIDsField.ZodType.(zoddef.ZodArrayType)
+	suite.True(ok)
+	suite.Equal(zoddef.ZodTypeNumber, arrayType.ElementType)
+
+	// Check Employees field (pluralized)
+	employeesField := schemas[0].Fields[2]
+	suite.Equal("employees", employeesField.Name)
+	suite.True(employeesField.Optional)
+
+	arrayType2, ok := employeesField.ZodType.(zoddef.ZodArrayType)
+	suite.True(ok)
+
+	lazyType, ok := arrayType2.ElementType.(zoddef.ZodLazyType)
+	suite.True(ok)
+	suite.Equal("Employee", lazyType.TypeName)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AliasedRelationship() {
+	personModel := yaml.Model{
+		Name: "Person",
+		Fields: map[string]yaml.ModelField{
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"WorkContact": {
+				Type:    "ForOne",
+				Aliased: "Contact",
+			},
+			"PersonalContact": {
+				Type:    "ForOne",
+				Aliased: "Contact",
+			},
+		},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(personModel, r)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 5) // ID + WorkContactID + WorkContact + PersonalContactID + PersonalContact
+
+	// Check WorkContact uses Contact as target
+	workContactField := schemas[0].Fields[4]
+	suite.Equal("workContact", workContactField.Name)
+
+	lazyType, ok := workContactField.ZodType.(zoddef.ZodLazyType)
+	suite.True(ok)
+	suite.Equal("Contact", lazyType.TypeName) // Should reference Contact, not WorkContact
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicHasOnePoly() {
+	personModel := yaml.Model{
+		Name: "Person",
+		Fields: map[string]yaml.ModelField{
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Note": {
+				Type:    "HasOnePoly",
+				Through: "Commentable",
+				Aliased: "Comment",
+			},
+		},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(personModel, r)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 3) // ID + NoteID + Note
+
+	// Check Note field references Comment
+	noteField := schemas[0].Fields[2]
+	suite.Equal("note", noteField.Name)
+
+	lazyType, ok := noteField.ZodType.(zoddef.ZodLazyType)
+	suite.True(ok)
+	suite.Equal("Comment", lazyType.TypeName)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForOnePoly() {
+	commentModel := yaml.Model{
+		Name: "Comment",
+		Fields: map[string]yaml.ModelField{
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Commentable": {
+				Type: "ForOnePoly",
+				For:  []string{"Person", "Company"},
+			},
+		},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(commentModel, r)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 3) // ID + CommentableType + CommentableID
+
+	// Check CommentableType field
+	typeField := schemas[0].Fields[1]
+	suite.Equal("commentableType", typeField.Name)
+	suite.Equal(zoddef.ZodTypeString, typeField.ZodType)
+	suite.True(typeField.Optional)
+
+	// Check CommentableID field
+	idField := schemas[0].Fields[2]
+	suite.Equal("commentableID", idField.Name)
+	suite.Equal(zoddef.ZodTypeNumber, idField.ZodType)
+	suite.True(idField.Optional)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_MultipleIdentifiers() {
+	model := yaml.Model{
+		Name: "Person",
+		Fields: map[string]yaml.ModelField{
+			"ID":        {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"FirstName": {Type: yaml.ModelFieldTypeString},
+			"LastName":  {Type: yaml.ModelFieldTypeString},
+			"Email":     {Type: yaml.ModelFieldTypeString},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+			"name":    {Fields: []string{"FirstName", "LastName"}},
+			"email":   {Fields: []string{"Email"}},
+		},
+		Related: map[string]yaml.ModelRelation{},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+
+	suite.NoError(err)
+	suite.Len(schemas, 4) // Main + 3 identifiers
+
+	suite.Equal("Person", schemas[0].Name)
+	suite.Equal("PersonIDEmail", schemas[1].Name)
+	suite.Equal("PersonIDName", schemas[2].Name)
+	suite.Equal("PersonIDPrimary", schemas[3].Name)
+
+	// Check name identifier has both fields
+	nameSchema := schemas[2]
+	suite.Len(nameSchema.Fields, 2)
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_NoRelationships() {
+	model := yaml.Model{
+		Name: "Simple",
+		Fields: map[string]yaml.ModelField{
+			"ID":   {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"Name": {Type: yaml.ModelFieldTypeString},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+
+	suite.NoError(err)
+	suite.Len(schemas, 2)
+	suite.Len(schemas[0].Fields, 2) // Only ID and Name, no relationship fields
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_OnlyMandatoryFields() {
+	model := yaml.Model{
+		Name: "Strict",
+		Fields: map[string]yaml.ModelField{
+			"ID":    {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"Name":  {Type: yaml.ModelFieldTypeString, Attributes: []string{"mandatory"}},
+			"Email": {Type: yaml.ModelFieldTypeString, Attributes: []string{"mandatory"}},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{},
+	}
+
+	r := registry.NewRegistry()
+
+	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 3)
+
+	// All fields should be non-optional
+	for _, field := range schemas[0].Fields {
+		suite.False(field.Optional, "Field %s should not be optional", field.Name)
+	}
+}
