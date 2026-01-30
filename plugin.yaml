@@ -1,0 +1,30 @@
+name: "@kalo-build/plugin-morphe-zod-types"
+displayName: "Morphe Zod Types"
+description: "Generates Zod validation schemas and TypeScript types from Morphe model definitions. Provides runtime validation."
+version: "1.0.0"
+
+input:
+  format: "KA:MO1:YAML1"
+  description: "Morphe YAML schema files"
+  suggestedStore:
+    name: "KA_MO_YAML"
+    type: "localFileSystem"
+    path: "./morphe"
+
+output:
+  format: "KA:MO1:ZOD1"
+  description: "Zod schema and TypeScript type files"
+  suggestedStore:
+    name: "KA_MO_ZOD"
+    type: "localFileSystem"
+    path: "./types"
+
+configSchema:
+  indentSize:
+    type: integer
+    default: 2
+    description: "Number of spaces for indentation"
+  useStrictMode:
+    type: boolean
+    default: false
+    description: "Enable strict mode for Zod schemas"
