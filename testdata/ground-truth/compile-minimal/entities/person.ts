@@ -1,8 +1,17 @@
 import { z } from 'zod'
 import { Nationality, NationalitySchema } from '../enums/nationality'
-import { CompanySchema } from './company'
+import { Company, CompanySchema } from './company'
 
-export const PersonSchema = z.object({
+export interface Person {
+  email?: string | undefined;
+  id: number;
+  lastName?: string | undefined;
+  nationality?: Nationality | undefined;
+  companyID?: number | undefined;
+  company?: Company | undefined
+}
+
+export const PersonSchema: z.ZodType<Person> = z.object({
   email: z.string().optional(),
   id: z.number(),
   lastName: z.string().optional(),
@@ -10,8 +19,6 @@ export const PersonSchema = z.object({
   companyID: z.number().optional(),
   company: z.lazy(() => CompanySchema).optional()
 })
-
-export type Person = z.infer<typeof PersonSchema>
 
 export const PersonIDPrimarySchema = z.object({
   id: z.number()

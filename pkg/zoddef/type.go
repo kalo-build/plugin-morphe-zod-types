@@ -5,6 +5,7 @@ import "github.com/kalo-build/clone"
 // ZodType represents a Zod type
 type ZodType interface {
 	GetZodTypeString() string
+	GetTypeScriptType() string
 	DeepClone() ZodType
 }
 
@@ -15,6 +16,23 @@ type ZodPrimitiveType struct {
 
 func (t ZodPrimitiveType) GetZodTypeString() string {
 	return "z." + t.TypeName + "()"
+}
+
+func (t ZodPrimitiveType) GetTypeScriptType() string {
+	switch t.TypeName {
+	case "string":
+		return "string"
+	case "number":
+		return "number"
+	case "boolean":
+		return "boolean"
+	case "date":
+		return "Date"
+	case "any":
+		return "unknown"
+	default:
+		return "unknown"
+	}
 }
 
 func (t ZodPrimitiveType) DeepClone() ZodType {
@@ -30,6 +48,10 @@ func (t ZodArrayType) GetZodTypeString() string {
 	return t.ElementType.GetZodTypeString() + ".array()"
 }
 
+func (t ZodArrayType) GetTypeScriptType() string {
+	return t.ElementType.GetTypeScriptType() + "[]"
+}
+
 func (t ZodArrayType) DeepClone() ZodType {
 	return ZodArrayType{ElementType: DeepCloneZodType(t.ElementType)}
 }
@@ -41,6 +63,10 @@ type ZodEnumRefType struct {
 
 func (t ZodEnumRefType) GetZodTypeString() string {
 	return t.EnumName + "Schema"
+}
+
+func (t ZodEnumRefType) GetTypeScriptType() string {
+	return t.EnumName
 }
 
 func (t ZodEnumRefType) DeepClone() ZodType {
@@ -56,6 +82,10 @@ func (t ZodSchemaRefType) GetZodTypeString() string {
 	return t.SchemaName + "Schema"
 }
 
+func (t ZodSchemaRefType) GetTypeScriptType() string {
+	return t.SchemaName
+}
+
 func (t ZodSchemaRefType) DeepClone() ZodType {
 	return ZodSchemaRefType{SchemaName: t.SchemaName}
 }
@@ -67,6 +97,10 @@ type ZodLazyType struct {
 
 func (t ZodLazyType) GetZodTypeString() string {
 	return "z.lazy(() => " + t.TypeName + "Schema)"
+}
+
+func (t ZodLazyType) GetTypeScriptType() string {
+	return t.TypeName
 }
 
 func (t ZodLazyType) DeepClone() ZodType {

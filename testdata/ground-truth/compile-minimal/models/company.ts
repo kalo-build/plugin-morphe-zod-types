@@ -1,15 +1,21 @@
 import { z } from 'zod'
-import { PersonSchema } from './person'
+import { Person, PersonSchema } from './person'
 
-export const CompanySchema = z.object({
+export interface Company {
+  id: number;
+  name?: string | undefined;
+  taxID?: string | undefined;
+  personIDs?: number[] | undefined;
+  persons?: Person[] | undefined
+}
+
+export const CompanySchema: z.ZodType<Company> = z.object({
   id: z.number(),
   name: z.string().optional(),
   taxID: z.string().optional(),
   personIDs: z.number().array().optional(),
   persons: z.lazy(() => PersonSchema).array().optional()
 })
-
-export type Company = z.infer<typeof CompanySchema>
 
 export const CompanyIDNameSchema = z.object({
   name: z.string().optional()

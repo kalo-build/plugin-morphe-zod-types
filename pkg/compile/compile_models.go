@@ -356,6 +356,8 @@ func addImportsForType(zodType zoddef.ZodType, currentModel string, importMap ma
 			if importMap[path] == nil {
 				importMap[path] = make(map[string]bool)
 			}
+			// Import both the type (for interface) and schema (for z.lazy)
+			importMap[path][t.TypeName] = true
 			importMap[path][t.TypeName+"Schema"] = true
 		}
 
@@ -366,7 +368,35 @@ func addImportsForType(zodType zoddef.ZodType, currentModel string, importMap ma
 
 // generateSchemaDefinition generates a single Zod schema definition
 func generateSchemaDefinition(cb *formatdef.ContentBuilder, schema *zoddef.Schema) {
-	cb.Line("export const %sSchema = z.object({", schema.Name)
+	// Check if schema has any lazy references (circular dependencies)
+	hasLazyRefs := schemaHasLazyRefs(schema)
+
+	if hasLazyRefs {
+		// For schemas with circular refs, we need to define the interface first
+		// to help TypeScript resolve the types
+		cb.Line("export interface %s {", schema.Name)
+		cb.Indent()
+		for i, field := range schema.Fields {
+			tsType := field.ZodType.GetTypeScriptType()
+			if field.Optional {
+				tsType += " | undefined"
+			}
+			line := fmt.Sprintf("%s%s: %s", field.Name, optionalMarker(field.Optional), tsType)
+			if i < len(schema.Fields)-1 {
+				line += ";"
+			}
+			cb.Line(line)
+		}
+		cb.Dedent()
+		cb.Line("}")
+		cb.EmptyLine()
+
+		// Use explicit type annotation to break circular inference
+		cb.Line("export const %sSchema: z.ZodType<%s> = z.object({", schema.Name, schema.Name)
+	} else {
+		cb.Line("export const %sSchema = z.object({", schema.Name)
+	}
+
 	cb.Indent()
 
 	for i, field := range schema.Fields {
@@ -384,8 +414,42 @@ func generateSchemaDefinition(cb *formatdef.ContentBuilder, schema *zoddef.Schem
 
 	cb.Dedent()
 	cb.Line("})")
-	cb.EmptyLine()
-	cb.Line("export type %s = z.infer<typeof %sSchema>", schema.Name, schema.Name)
+
+	if !hasLazyRefs {
+		// Only generate inferred type if we didn't define interface above
+		cb.EmptyLine()
+		cb.Line("export type %s = z.infer<typeof %sSchema>", schema.Name, schema.Name)
+	}
+}
+
+// schemaHasLazyRefs checks if a schema has any z.lazy() references
+func schemaHasLazyRefs(schema *zoddef.Schema) bool {
+	for _, field := range schema.Fields {
+		if hasLazyType(field.ZodType) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasLazyType recursively checks if a type contains z.lazy()
+func hasLazyType(t zoddef.ZodType) bool {
+	switch v := t.(type) {
+	case zoddef.ZodLazyType:
+		return true
+	case zoddef.ZodArrayType:
+		return hasLazyType(v.ElementType)
+	default:
+		return false
+	}
+}
+
+// optionalMarker returns "?" if the field is optional
+func optionalMarker(optional bool) string {
+	if optional {
+		return "?"
+	}
+	return ""
 }
 
 // joinStrings joins a slice of strings with a separator

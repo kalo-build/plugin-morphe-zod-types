@@ -1,14 +1,19 @@
 import { z } from 'zod'
-import { PersonSchema } from './person'
+import { Person, PersonSchema } from './person'
 
-export const ContactInfoSchema = z.object({
+export interface ContactInfo {
+  email?: string | undefined;
+  id: number;
+  personID?: number | undefined;
+  person?: Person | undefined
+}
+
+export const ContactInfoSchema: z.ZodType<ContactInfo> = z.object({
   email: z.string().optional(),
   id: z.number(),
   personID: z.number().optional(),
   person: z.lazy(() => PersonSchema).optional()
 })
-
-export type ContactInfo = z.infer<typeof ContactInfoSchema>
 
 export const ContactInfoIDEmailSchema = z.object({
   email: z.string().optional()
