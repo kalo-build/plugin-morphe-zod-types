@@ -263,9 +263,18 @@ func generateZodModelContent(modelName string, schemas []*zoddef.Schema, r *regi
 	return cb.Build()
 }
 
+// importKind tracks whether an import is a type-only or value import
+type importKind int
+
+const (
+	importValue importKind = iota
+	importType
+)
+
 // collectImports gathers all necessary imports for the schemas
+// Returns a map of path -> (name -> isTypeOnly)
 func collectImports(schemas []*zoddef.Schema, modelName string, r *registry.Registry) []zoddef.SchemaImport {
-	importMap := make(map[string]map[string]bool) // path -> names
+	importMap := make(map[string]map[string]importKind) // path -> name -> kind
 
 	for _, schema := range schemas {
 		for _, field := range schema.Fields {
@@ -286,10 +295,14 @@ func collectImports(schemas []*zoddef.Schema, modelName string, r *registry.Regi
 	for _, path := range paths {
 		names := importMap[path]
 		nameSlice := make([]string, 0, len(names))
-		for name := range names {
-			nameSlice = append(nameSlice, name)
+		for name, kind := range names {
+			if kind == importType {
+				nameSlice = append(nameSlice, "type "+name)
+			} else {
+				nameSlice = append(nameSlice, name)
+			}
 		}
-		// Sort names alphabetically
+		// Sort names alphabetically (type imports will sort after due to "type " prefix)
 		sortStrings(nameSlice)
 
 		if len(nameSlice) > 0 {
@@ -327,26 +340,25 @@ func sortStrings(strs []string) {
 }
 
 // addImportsForType recursively adds imports for a Zod type
-func addImportsForType(zodType zoddef.ZodType, currentModel string, importMap map[string]map[string]bool, r *registry.Registry) {
+func addImportsForType(zodType zoddef.ZodType, currentModel string, importMap map[string]map[string]importKind, r *registry.Registry) {
 	switch t := zodType.(type) {
 	case zoddef.ZodEnumRefType:
-		// Import enum
+		// Import enum (type for interface, value for schema)
 		path := "../enums/" + toFileName(t.EnumName)
 		if importMap[path] == nil {
-			importMap[path] = make(map[string]bool)
+			importMap[path] = make(map[string]importKind)
 		}
-		// Add enum name first, then schema (alphabetical order)
-		importMap[path][t.EnumName] = true
-		importMap[path][t.EnumName+"Schema"] = true
+		importMap[path][t.EnumName] = importType
+		importMap[path][t.EnumName+"Schema"] = importValue
 
 	case zoddef.ZodSchemaRefType:
 		// Import another schema if it's not the current one
 		if t.SchemaName != currentModel {
 			path := "./" + toFileName(t.SchemaName)
 			if importMap[path] == nil {
-				importMap[path] = make(map[string]bool)
+				importMap[path] = make(map[string]importKind)
 			}
-			importMap[path][t.SchemaName+"Schema"] = true
+			importMap[path][t.SchemaName+"Schema"] = importValue
 		}
 
 	case zoddef.ZodLazyType:
@@ -354,11 +366,11 @@ func addImportsForType(zodType zoddef.ZodType, currentModel string, importMap ma
 		if t.TypeName != currentModel {
 			path := "./" + toFileName(t.TypeName)
 			if importMap[path] == nil {
-				importMap[path] = make(map[string]bool)
+				importMap[path] = make(map[string]importKind)
 			}
-			// Import both the type (for interface) and schema (for z.lazy)
-			importMap[path][t.TypeName] = true
-			importMap[path][t.TypeName+"Schema"] = true
+			// Import type (for interface) and schema (for z.lazy)
+			importMap[path][t.TypeName] = importType
+			importMap[path][t.TypeName+"Schema"] = importValue
 		}
 
 	case zoddef.ZodArrayType:

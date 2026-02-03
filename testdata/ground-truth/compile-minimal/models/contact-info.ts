@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { Person, PersonSchema } from './person'
+import { PersonSchema, type Person } from './person'
 
 export interface ContactInfo {
   email?: string | undefined;

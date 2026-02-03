@@ -87,7 +87,7 @@ func generateZodStructureContent(structureName string, schema *zoddef.Schema, r 
 
 // collectImportsForSchema gathers imports for a single schema
 func collectImportsForSchema(schema *zoddef.Schema, currentName string, r *registry.Registry) []zoddef.SchemaImport {
-	importMap := make(map[string]map[string]bool)
+	importMap := make(map[string]map[string]importKind)
 
 	for _, field := range schema.Fields {
 		addImportsForType(field.ZodType, currentName, importMap, r)
@@ -96,8 +96,12 @@ func collectImportsForSchema(schema *zoddef.Schema, currentName string, r *regis
 	imports := []zoddef.SchemaImport{}
 	for path, names := range importMap {
 		nameSlice := []string{}
-		for name := range names {
-			nameSlice = append(nameSlice, name)
+		for name, kind := range names {
+			if kind == importType {
+				nameSlice = append(nameSlice, "type "+name)
+			} else {
+				nameSlice = append(nameSlice, name)
+			}
 		}
 		if len(nameSlice) > 0 {
 			imports = append(imports, zoddef.SchemaImport{

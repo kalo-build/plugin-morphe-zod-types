@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { Nationality, NationalitySchema } from '../enums/nationality'
-import { Company, CompanySchema } from './company'
+import { NationalitySchema, type Nationality } from '../enums/nationality'
+import { CompanySchema, type Company } from './company'
 
 export interface Person {
   email?: string | undefined;
