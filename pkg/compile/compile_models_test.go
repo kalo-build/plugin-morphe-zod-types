@@ -6,6 +6,7 @@ import (
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
 	"github.com/stretchr/testify/suite"
 )
@@ -43,7 +44,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_BasicFields() {
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+	schemas, err := compile.MorpheModelToZodSchemas(model, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.NotNil(schemas)
@@ -88,7 +89,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AllFieldTypes()
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+	schemas, err := compile.MorpheModelToZodSchemas(model, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas, 2)
@@ -123,7 +124,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_EnumField() {
 		},
 	})
 
-	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+	schemas, err := compile.MorpheModelToZodSchemas(model, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas, 2)
@@ -153,7 +154,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasOne() {
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(userModel, r)
+	schemas, err := compile.MorpheModelToZodSchemas(userModel, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3) // ID + ProfileID + Profile
@@ -190,7 +191,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasMany() {
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(companyModel, r)
+	schemas, err := compile.MorpheModelToZodSchemas(companyModel, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3) // ID + EmployeeIDs + Employees
@@ -240,7 +241,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AliasedRelation
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(personModel, r)
+	schemas, err := compile.MorpheModelToZodSchemas(personModel, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 5) // ID + WorkContactID + WorkContact + PersonalContactID + PersonalContact
@@ -274,7 +275,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicHasO
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(personModel, r)
+	schemas, err := compile.MorpheModelToZodSchemas(personModel, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3) // ID + NoteID + Note
@@ -307,7 +308,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForO
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(commentModel, r)
+	schemas, err := compile.MorpheModelToZodSchemas(commentModel, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3) // ID + CommentableType + CommentableID
@@ -344,7 +345,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_MultipleIdentif
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+	schemas, err := compile.MorpheModelToZodSchemas(model, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas, 4) // Main + 3 identifiers
@@ -374,7 +375,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_NoRelationships
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+	schemas, err := compile.MorpheModelToZodSchemas(model, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas, 2)
@@ -397,7 +398,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_OnlyMandatoryFi
 
 	r := registry.NewRegistry()
 
-	schemas, err := compile.MorpheModelToZodSchemas(model, r)
+	schemas, err := compile.MorpheModelToZodSchemas(model, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3)

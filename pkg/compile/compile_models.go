@@ -8,6 +8,7 @@ import (
 	"github.com/kalo-build/go-util/strcase"
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/formatdef"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/typemap"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
@@ -16,10 +17,11 @@ import (
 // CompileAllModels compiles all models to Zod schemas
 func CompileAllModels(config MorpheCompileConfig, r *registry.Registry, writer *MorpheWriter) error {
 	modelContents := make(map[string][]byte)
+	fieldCasing := config.FormatConfig.FieldCasing
 
 	for modelName, model := range r.GetAllModels() {
 		// Compile the model to Zod schema
-		zodSchemas, err := MorpheModelToZodSchemas(model, r)
+		zodSchemas, err := MorpheModelToZodSchemas(model, r, fieldCasing)
 		if err != nil {
 			return fmt.Errorf("failed to compile model %s: %w", modelName, err)
 		}
@@ -34,7 +36,7 @@ func CompileAllModels(config MorpheCompileConfig, r *registry.Registry, writer *
 }
 
 // MorpheModelToZodSchemas converts a Morphe model to Zod schema definitions
-func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry) ([]*zoddef.Schema, error) {
+func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry, fieldCasing cfg.Casing) ([]*zoddef.Schema, error) {
 	schemas := []*zoddef.Schema{}
 
 	// Create the main model schema
@@ -64,7 +66,7 @@ func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry) ([]*zoddef.
 		}
 
 		mainSchema.Fields = append(mainSchema.Fields, zoddef.SchemaField{
-			Name:     strcase.ToCamelCase(fieldName),
+			Name:     fieldCasing.Apply(fieldName),
 			ZodType:  zodType,
 			Optional: !isMandatory,
 		})
@@ -72,7 +74,7 @@ func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry) ([]*zoddef.
 
 	// Process relationships
 	if len(model.Related) > 0 {
-		relationFields, err := getRelationshipFields(model.Related, r)
+		relationFields, err := getRelationshipFields(model.Related, r, fieldCasing)
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +84,7 @@ func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry) ([]*zoddef.
 	schemas = append(schemas, mainSchema)
 
 	// Create identifier schemas
-	identifierSchemas, err := getIdentifierSchemas(model, mainSchema)
+	identifierSchemas, err := getIdentifierSchemas(model, mainSchema, fieldCasing)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +105,7 @@ func getZodTypeForField(field yaml.ModelField, r *registry.Registry) (zoddef.Zod
 }
 
 // getRelationshipFields generates fields for model relationships
-func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Registry) ([]zoddef.SchemaField, error) {
+func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Registry, fieldCasing cfg.Casing) ([]zoddef.SchemaField, error) {
 	fields := []zoddef.SchemaField{}
 
 	relationNames := core.MapKeysSorted(related)
@@ -116,18 +118,21 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			targetModelName = relation.Aliased
 		}
 
+		// Get the base field name with casing applied
+		baseName := fieldCasing.Apply(relationName)
+
 		// Generate fields based on relationship type
 		switch relation.Type {
 		case "HasOne", "ForOne":
 			// Add ID field
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "ID",
+				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
 				Optional: true,
 			})
 			// Add reference field
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName),
+				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetModelName},
 				Optional: true,
 			})
@@ -135,12 +140,12 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		case "HasMany", "ForMany":
 			// Add IDs array field
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "IDs",
+				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
 				Optional: true,
 			})
 			// Add references array field (pluralize the field name)
-			pluralName := strcase.ToCamelCase(relationName)
+			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
 			}
@@ -153,12 +158,12 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		case "HasOnePoly":
 			// Polymorphic HasOne - just like HasOne but referencing the aliased type
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "ID",
+				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
 				Optional: true,
 			})
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName),
+				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetModelName},
 				Optional: true,
 			})
@@ -166,12 +171,12 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		case "HasManyPoly":
 			// Polymorphic HasMany
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "IDs",
+				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
 				Optional: true,
 			})
 			// Add references array field (pluralize the field name)
-			pluralName := strcase.ToCamelCase(relationName)
+			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
 			}
@@ -184,12 +189,12 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		case "ForOnePoly", "ForManyPoly":
 			// For polymorphic relationships, we include a type discriminator
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "Type",
+				Name:     baseName + typeSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeString,
 				Optional: true,
 			})
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "ID",
+				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
 				Optional: true,
 			})
@@ -199,8 +204,38 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 	return fields, nil
 }
 
+// idSuffix returns the appropriate suffix for ID fields based on casing
+func idSuffix(casing cfg.Casing) string {
+	switch casing {
+	case cfg.CasingSnake:
+		return "_id"
+	default:
+		return "ID"
+	}
+}
+
+// idsSuffix returns the appropriate suffix for IDs array fields based on casing
+func idsSuffix(casing cfg.Casing) string {
+	switch casing {
+	case cfg.CasingSnake:
+		return "_ids"
+	default:
+		return "IDs"
+	}
+}
+
+// typeSuffix returns the appropriate suffix for Type fields based on casing
+func typeSuffix(casing cfg.Casing) string {
+	switch casing {
+	case cfg.CasingSnake:
+		return "_type"
+	default:
+		return "Type"
+	}
+}
+
 // getIdentifierSchemas creates schemas for model identifiers
-func getIdentifierSchemas(model yaml.Model, mainSchema *zoddef.Schema) ([]*zoddef.Schema, error) {
+func getIdentifierSchemas(model yaml.Model, mainSchema *zoddef.Schema, fieldCasing cfg.Casing) ([]*zoddef.Schema, error) {
 	schemas := []*zoddef.Schema{}
 
 	identifierNames := core.MapKeysSorted(model.Identifiers)
@@ -215,11 +250,11 @@ func getIdentifierSchemas(model yaml.Model, mainSchema *zoddef.Schema) ([]*zodde
 
 		// Add fields from the identifier
 		for _, fieldName := range identifier.Fields {
-			camelFieldName := strcase.ToCamelCase(fieldName)
+			casedFieldName := fieldCasing.Apply(fieldName)
 
 			// Find the field in the main schema
 			for _, field := range mainSchema.Fields {
-				if field.Name == camelFieldName {
+				if field.Name == casedFieldName {
 					idSchema.Fields = append(idSchema.Fields, field)
 					break
 				}

@@ -1,5 +1,7 @@
 package cfg
 
+import "fmt"
+
 // MorpheConfig contains configuration for all Morphe type categories
 // This is a simplified version without language-specific details
 type MorpheConfig struct {
@@ -8,6 +10,10 @@ type MorpheConfig struct {
 	Models     ModelConfig
 	Structures StructureConfig
 	Entities   EntityConfig
+
+	// FieldCasing specifies the casing for field names in generated schemas.
+	// Valid values: "camel" (default), "snake", "pascal"
+	FieldCasing Casing
 }
 
 // EnumConfig contains configuration specific to enum generation
@@ -47,9 +53,8 @@ type EntityConfig struct {
 
 // Validate checks if the configuration is valid
 func (config MorpheConfig) Validate() error {
-	// TODO: Add validation logic for your format-specific configuration
-	// Example validations:
-	// - Check enum style is one of allowed values
-	// - Ensure no conflicting options are set
+	if !config.FieldCasing.IsValid() {
+		return fmt.Errorf("invalid fieldCasing value %q, must be one of: camel, snake, pascal, or empty", config.FieldCasing)
+	}
 	return nil
 }

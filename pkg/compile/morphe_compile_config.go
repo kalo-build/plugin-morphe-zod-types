@@ -4,6 +4,7 @@ import (
 	"path"
 
 	rcfg "github.com/kalo-build/morphe-go/pkg/registry/cfg"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 )
 
 // MorpheCompileConfig contains all configuration for compiling Morphe to Zod schemas
@@ -25,6 +26,10 @@ type ZodConfig struct {
 
 	// UseStrictMode enables strict mode for Zod schemas (default: false)
 	UseStrictMode bool
+
+	// FieldCasing specifies the casing for field names in generated schemas.
+	// Valid values: "camel" (default), "snake", "pascal"
+	FieldCasing cfg.Casing
 }
 
 // DefaultMorpheCompileConfig creates a default configuration
@@ -57,6 +62,10 @@ func (config MorpheCompileConfig) Validate() error {
 	// Validate Zod-specific configuration
 	if config.FormatConfig.IndentSize < 0 {
 		config.FormatConfig.IndentSize = 2
+	}
+
+	if !config.FormatConfig.FieldCasing.IsValid() {
+		return cfg.ErrInvalidFieldCasing(config.FormatConfig.FieldCasing)
 	}
 
 	return nil
