@@ -8,6 +8,7 @@ import (
 	"github.com/kalo-build/go-util/strcase"
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/formatdef"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/typemap"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
@@ -16,10 +17,11 @@ import (
 // CompileAllEntities compiles all entities to Zod schemas
 func CompileAllEntities(config MorpheCompileConfig, r *registry.Registry, writer *MorpheWriter) error {
 	entityContents := make(map[string][]byte)
+	fieldCasing := config.FormatConfig.FieldCasing
 
 	for entityName, entity := range r.GetAllEntities() {
 		// Compile the entity to Zod schemas
-		zodSchemas, err := MorpheEntityToZodSchemas(entity, r)
+		zodSchemas, err := MorpheEntityToZodSchemas(entity, r, fieldCasing)
 		if err != nil {
 			return fmt.Errorf("failed to compile entity %s: %w", entityName, err)
 		}
@@ -34,7 +36,7 @@ func CompileAllEntities(config MorpheCompileConfig, r *registry.Registry, writer
 }
 
 // MorpheEntityToZodSchemas converts a Morphe entity to Zod schema definitions
-func MorpheEntityToZodSchemas(entity yaml.Entity, r *registry.Registry) ([]*zoddef.Schema, error) {
+func MorpheEntityToZodSchemas(entity yaml.Entity, r *registry.Registry, fieldCasing cfg.Casing) ([]*zoddef.Schema, error) {
 	schemas := []*zoddef.Schema{}
 
 	// Create the main entity schema
@@ -54,25 +56,25 @@ func MorpheEntityToZodSchemas(entity yaml.Entity, r *registry.Registry) ([]*zodd
 			return nil, err
 		}
 
-		// Check if field is mandatory
-		isMandatory := false
+		// Fields are required by default; only fields with the "optional" attribute are optional
+		isOptional := false
 		for _, attr := range field.Attributes {
-			if attr == "mandatory" {
-				isMandatory = true
+			if attr == "optional" {
+				isOptional = true
 				break
 			}
 		}
 
 		mainSchema.Fields = append(mainSchema.Fields, zoddef.SchemaField{
-			Name:     strcase.ToCamelCase(fieldName),
+			Name:     fieldCasing.Apply(fieldName),
 			ZodType:  zodType,
-			Optional: !isMandatory,
+			Optional: isOptional,
 		})
 	}
 
 	// Process entity relationships
 	if len(entity.Related) > 0 {
-		relationFields, err := getEntityRelationshipFields(entity.Related, r)
+		relationFields, err := getEntityRelationshipFields(entity.Related, r, fieldCasing)
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +84,7 @@ func MorpheEntityToZodSchemas(entity yaml.Entity, r *registry.Registry) ([]*zodd
 	schemas = append(schemas, mainSchema)
 
 	// Create identifier schemas for entities
-	identifierSchemas, err := getEntityIdentifierSchemas(entity, mainSchema)
+	identifierSchemas, err := getEntityIdentifierSchemas(entity, mainSchema, fieldCasing)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +148,7 @@ func getZodTypeForEntityField(field yaml.EntityField, r *registry.Registry) (zod
 }
 
 // getEntityRelationshipFields generates fields for entity relationships
-func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *registry.Registry) ([]zoddef.SchemaField, error) {
+func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *registry.Registry, fieldCasing cfg.Casing) ([]zoddef.SchemaField, error) {
 	fields := []zoddef.SchemaField{}
 
 	relationNames := core.MapKeysSorted(related)
@@ -159,18 +161,21 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			targetEntityName = relation.Aliased
 		}
 
+		// Get the base field name with casing applied
+		baseName := fieldCasing.Apply(relationName)
+
 		// Generate fields based on relationship type
 		switch relation.Type {
 		case "HasOne", "ForOne":
 			// Add ID field
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "ID",
+				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
 				Optional: true,
 			})
 			// Add reference field
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName),
+				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetEntityName},
 				Optional: true,
 			})
@@ -178,12 +183,12 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 		case "HasMany", "ForMany":
 			// Add IDs array field
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "IDs",
+				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
 				Optional: true,
 			})
 			// Add references array field (pluralize the field name)
-			pluralName := strcase.ToCamelCase(relationName)
+			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
 			}
@@ -195,24 +200,24 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 
 		case "HasOnePoly":
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "ID",
+				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
 				Optional: true,
 			})
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName),
+				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetEntityName},
 				Optional: true,
 			})
 
 		case "HasManyPoly":
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "IDs",
+				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
 				Optional: true,
 			})
 			// Add references array field (pluralize the field name)
-			pluralName := strcase.ToCamelCase(relationName)
+			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
 			}
@@ -224,12 +229,12 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 
 		case "ForOnePoly", "ForManyPoly":
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "Type",
+				Name:     baseName + typeSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeString,
 				Optional: true,
 			})
 			fields = append(fields, zoddef.SchemaField{
-				Name:     strcase.ToCamelCase(relationName) + "ID",
+				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
 				Optional: true,
 			})
@@ -240,7 +245,7 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 }
 
 // getEntityIdentifierSchemas creates schemas for entity identifiers
-func getEntityIdentifierSchemas(entity yaml.Entity, mainSchema *zoddef.Schema) ([]*zoddef.Schema, error) {
+func getEntityIdentifierSchemas(entity yaml.Entity, mainSchema *zoddef.Schema, fieldCasing cfg.Casing) ([]*zoddef.Schema, error) {
 	schemas := []*zoddef.Schema{}
 
 	identifierNames := core.MapKeysSorted(entity.Identifiers)
@@ -255,11 +260,11 @@ func getEntityIdentifierSchemas(entity yaml.Entity, mainSchema *zoddef.Schema) (
 
 		// Add fields from the identifier
 		for _, fieldName := range identifier.Fields {
-			camelFieldName := strcase.ToCamelCase(fieldName)
+			casedFieldName := fieldCasing.Apply(fieldName)
 
 			// Find the field in the main schema
 			for _, field := range mainSchema.Fields {
-				if field.Name == camelFieldName {
+				if field.Name == casedFieldName {
 					idSchema.Fields = append(idSchema.Fields, field)
 					break
 				}

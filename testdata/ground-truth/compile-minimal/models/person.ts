@@ -4,10 +4,10 @@ import { CompanySchema, type Company } from './company'
 import { ContactInfoSchema, type ContactInfo } from './contact-info'
 
 export interface Person {
-  firstName?: string | undefined;
+  firstName: string;
   id: number;
-  lastName?: string | undefined;
-  nationality?: Nationality | undefined;
+  lastName: string;
+  nationality: Nationality;
   companyID?: number | undefined;
   company?: Company | undefined;
   contactInfoID?: number | undefined;
@@ -15,10 +15,10 @@ export interface Person {
 }
 
 export const PersonSchema: z.ZodType<Person> = z.object({
-  firstName: z.string().optional(),
+  firstName: z.string(),
   id: z.number(),
-  lastName: z.string().optional(),
-  nationality: NationalitySchema.optional(),
+  lastName: z.string(),
+  nationality: NationalitySchema,
   companyID: z.number().optional(),
   company: z.lazy(() => CompanySchema).optional(),
   contactInfoID: z.number().optional(),
@@ -26,8 +26,8 @@ export const PersonSchema: z.ZodType<Person> = z.object({
 })
 
 export const PersonIDNameSchema = z.object({
-  firstName: z.string().optional(),
-  lastName: z.string().optional()
+  firstName: z.string(),
+  lastName: z.string()
 })
 
 export type PersonIDName = z.infer<typeof PersonIDNameSchema>

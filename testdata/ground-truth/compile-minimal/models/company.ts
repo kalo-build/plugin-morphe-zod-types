@@ -3,22 +3,22 @@ import { PersonSchema, type Person } from './person'
 
 export interface Company {
   id: number;
-  name?: string | undefined;
-  taxID?: string | undefined;
+  name: string;
+  taxID: string;
   personIDs?: number[] | undefined;
   persons?: Person[] | undefined
 }
 
 export const CompanySchema: z.ZodType<Company> = z.object({
   id: z.number(),
-  name: z.string().optional(),
-  taxID: z.string().optional(),
+  name: z.string(),
+  taxID: z.string(),
   personIDs: z.number().array().optional(),
   persons: z.lazy(() => PersonSchema).array().optional()
 })
 
 export const CompanyIDNameSchema = z.object({
-  name: z.string().optional()
+  name: z.string()
 })
 
 export type CompanyIDName = z.infer<typeof CompanyIDNameSchema>

@@ -24,14 +24,14 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_BasicFields() {
 		Name: "User",
 		Fields: map[string]yaml.ModelField{
 			"ID": {
-				Type:       yaml.ModelFieldTypeAutoIncrement,
-				Attributes: []string{"mandatory"},
+				Type: yaml.ModelFieldTypeAutoIncrement,
 			},
 			"Name": {
 				Type: yaml.ModelFieldTypeString,
 			},
 			"Email": {
-				Type: yaml.ModelFieldTypeString,
+				Type:       yaml.ModelFieldTypeString,
+				Attributes: []string{"optional"},
 			},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
@@ -55,12 +55,16 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_BasicFields() {
 	suite.Equal("User", mainSchema.Name)
 	suite.Len(mainSchema.Fields, 3)
 
-	// ID should be mandatory (not optional)
+	// Fields without "optional" attribute should be required
 	idField := mainSchema.Fields[1]
 	suite.Equal("id", idField.Name)
 	suite.False(idField.Optional)
 
-	// Name and Email should be optional
+	nameField := mainSchema.Fields[2]
+	suite.Equal("name", nameField.Name)
+	suite.False(nameField.Optional)
+
+	// Email with "optional" attribute should be optional
 	emailField := mainSchema.Fields[0]
 	suite.Equal("email", emailField.Name)
 	suite.True(emailField.Optional)
@@ -71,7 +75,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AllFieldTypes()
 		Name: "AllTypes",
 		Fields: map[string]yaml.ModelField{
 			"UUID":          {Type: yaml.ModelFieldTypeUUID},
-			"AutoIncrement": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"AutoIncrement": {Type: yaml.ModelFieldTypeAutoIncrement},
 			"String":        {Type: yaml.ModelFieldTypeString},
 			"Integer":       {Type: yaml.ModelFieldTypeInteger},
 			"Float":         {Type: yaml.ModelFieldTypeFloat},
@@ -101,8 +105,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_EnumField() {
 		Name: "Person",
 		Fields: map[string]yaml.ModelField{
 			"ID": {
-				Type:       yaml.ModelFieldTypeAutoIncrement,
-				Attributes: []string{"mandatory"},
+				Type: yaml.ModelFieldTypeAutoIncrement,
 			},
 			"Nationality": {
 				Type: "Nationality",
@@ -142,7 +145,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasOne() {
 	userModel := yaml.Model{
 		Name: "User",
 		Fields: map[string]yaml.ModelField{
-			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
 			"primary": {Fields: []string{"ID"}},
@@ -179,7 +182,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasMany() {
 	companyModel := yaml.Model{
 		Name: "Company",
 		Fields: map[string]yaml.ModelField{
-			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
 			"primary": {Fields: []string{"ID"}},
@@ -222,7 +225,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AliasedRelation
 	personModel := yaml.Model{
 		Name: "Person",
 		Fields: map[string]yaml.ModelField{
-			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
 			"primary": {Fields: []string{"ID"}},
@@ -259,7 +262,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicHasO
 	personModel := yaml.Model{
 		Name: "Person",
 		Fields: map[string]yaml.ModelField{
-			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
 			"primary": {Fields: []string{"ID"}},
@@ -293,7 +296,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForO
 	commentModel := yaml.Model{
 		Name: "Comment",
 		Fields: map[string]yaml.ModelField{
-			"ID": {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID": {Type: yaml.ModelFieldTypeAutoIncrement},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
 			"primary": {Fields: []string{"ID"}},
@@ -330,7 +333,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_MultipleIdentif
 	model := yaml.Model{
 		Name: "Person",
 		Fields: map[string]yaml.ModelField{
-			"ID":        {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID":        {Type: yaml.ModelFieldTypeAutoIncrement},
 			"FirstName": {Type: yaml.ModelFieldTypeString},
 			"LastName":  {Type: yaml.ModelFieldTypeString},
 			"Email":     {Type: yaml.ModelFieldTypeString},
@@ -364,7 +367,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_NoRelationships
 	model := yaml.Model{
 		Name: "Simple",
 		Fields: map[string]yaml.ModelField{
-			"ID":   {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
+			"ID":   {Type: yaml.ModelFieldTypeAutoIncrement},
 			"Name": {Type: yaml.ModelFieldTypeString},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
@@ -382,13 +385,13 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_NoRelationships
 	suite.Len(schemas[0].Fields, 2) // Only ID and Name, no relationship fields
 }
 
-func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_OnlyMandatoryFields() {
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AllFieldsRequiredByDefault() {
 	model := yaml.Model{
 		Name: "Strict",
 		Fields: map[string]yaml.ModelField{
-			"ID":    {Type: yaml.ModelFieldTypeAutoIncrement, Attributes: []string{"mandatory"}},
-			"Name":  {Type: yaml.ModelFieldTypeString, Attributes: []string{"mandatory"}},
-			"Email": {Type: yaml.ModelFieldTypeString, Attributes: []string{"mandatory"}},
+			"ID":    {Type: yaml.ModelFieldTypeAutoIncrement},
+			"Name":  {Type: yaml.ModelFieldTypeString},
+			"Email": {Type: yaml.ModelFieldTypeString},
 		},
 		Identifiers: map[string]yaml.ModelIdentifier{
 			"primary": {Fields: []string{"ID"}},
@@ -403,8 +406,8 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_OnlyMandatoryFi
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3)
 
-	// All fields should be non-optional
+	// All fields without "optional" attribute should be required
 	for _, field := range schemas[0].Fields {
-		suite.False(field.Optional, "Field %s should not be optional", field.Name)
+		suite.False(field.Optional, "Field %s should be required by default", field.Name)
 	}
 }

@@ -2,21 +2,21 @@ import { z } from 'zod'
 import { PersonSchema, type Person } from './person'
 
 export interface ContactInfo {
-  email?: string | undefined;
+  email: string;
   id: number;
   personID?: number | undefined;
   person?: Person | undefined
 }
 
 export const ContactInfoSchema: z.ZodType<ContactInfo> = z.object({
-  email: z.string().optional(),
+  email: z.string(),
   id: z.number(),
   personID: z.number().optional(),
   person: z.lazy(() => PersonSchema).optional()
 })
 
 export const ContactInfoIDEmailSchema = z.object({
-  email: z.string().optional()
+  email: z.string()
 })
 
 export type ContactInfoIDEmail = z.infer<typeof ContactInfoIDEmailSchema>

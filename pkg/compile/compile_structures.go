@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/kalo-build/go-util/core"
-	"github.com/kalo-build/go-util/strcase"
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/formatdef"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/typemap"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
@@ -15,10 +15,11 @@ import (
 // CompileAllStructures compiles all structures to Zod schemas
 func CompileAllStructures(config MorpheCompileConfig, r *registry.Registry, writer *MorpheWriter) error {
 	structureContents := make(map[string][]byte)
+	fieldCasing := config.FormatConfig.FieldCasing
 
 	for structureName, structure := range r.GetAllStructures() {
 		// Compile the structure to Zod schema
-		zodSchema, err := MorpheStructureToZodSchema(structure, r)
+		zodSchema, err := MorpheStructureToZodSchema(structure, r, fieldCasing)
 		if err != nil {
 			return fmt.Errorf("failed to compile structure %s: %w", structureName, err)
 		}
@@ -33,7 +34,7 @@ func CompileAllStructures(config MorpheCompileConfig, r *registry.Registry, writ
 }
 
 // MorpheStructureToZodSchema converts a Morphe structure to a Zod schema
-func MorpheStructureToZodSchema(structure yaml.Structure, r *registry.Registry) (*zoddef.Schema, error) {
+func MorpheStructureToZodSchema(structure yaml.Structure, r *registry.Registry, fieldCasing cfg.Casing) (*zoddef.Schema, error) {
 	schema := &zoddef.Schema{
 		Name:    structure.Name,
 		Imports: []zoddef.SchemaImport{},
@@ -50,11 +51,19 @@ func MorpheStructureToZodSchema(structure yaml.Structure, r *registry.Registry) 
 			return nil, err
 		}
 
-		// Structures don't have mandatory attributes typically, all fields are optional by default
+		// Structure fields are required by default; only fields with the "optional" attribute are optional
+		isOptional := false
+		for _, attr := range field.Attributes {
+			if attr == "optional" {
+				isOptional = true
+				break
+			}
+		}
+
 		schema.Fields = append(schema.Fields, zoddef.SchemaField{
-			Name:     strcase.ToCamelCase(fieldName),
+			Name:     fieldCasing.Apply(fieldName),
 			ZodType:  zodType,
-			Optional: true,
+			Optional: isOptional,
 		})
 	}
 

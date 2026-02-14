@@ -6,6 +6,7 @@ import (
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
 	"github.com/stretchr/testify/suite"
 )
@@ -38,11 +39,11 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_BasicFields(
 		Name: "UserProfile",
 		Fields: map[string]yaml.EntityField{
 			"ID": {
-				Type:       "User.ID",
-				Attributes: []string{"mandatory"},
+				Type: "User.ID",
 			},
 			"Name": {
-				Type: "User.Name",
+				Type:       "User.Name",
+				Attributes: []string{"optional"},
 			},
 		},
 		Identifiers: map[string]yaml.EntityIdentifier{
@@ -51,7 +52,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_BasicFields(
 		Related: map[string]yaml.EntityRelation{},
 	}
 
-	schemas, err := compile.MorpheEntityToZodSchemas(entity, r)
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas, 2) // Main + primary identifier
@@ -61,12 +62,12 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_BasicFields(
 	suite.Equal("UserProfile", mainSchema.Name)
 	suite.Len(mainSchema.Fields, 2)
 
-	// ID should be mandatory
+	// ID should be required (no optional attribute)
 	idField := mainSchema.Fields[0]
 	suite.Equal("id", idField.Name)
 	suite.False(idField.Optional)
 
-	// Name should be optional (no mandatory attribute)
+	// Name with "optional" attribute should be optional
 	nameField := mainSchema.Fields[1]
 	suite.Equal("name", nameField.Name)
 	suite.True(nameField.Optional)
@@ -106,8 +107,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_IndirectedTh
 		Name: "PersonView",
 		Fields: map[string]yaml.EntityField{
 			"ID": {
-				Type:       "Person.ID",
-				Attributes: []string{"mandatory"},
+				Type: "Person.ID",
 			},
 			"Email": {
 				Type: "Person.ContactInfo.Email", // Indirected through relationship
@@ -119,7 +119,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_IndirectedTh
 		Related: map[string]yaml.EntityRelation{},
 	}
 
-	schemas, err := compile.MorpheEntityToZodSchemas(entity, r)
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas, 2)
@@ -157,8 +157,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_EnumField() 
 		Name: "PersonView",
 		Fields: map[string]yaml.EntityField{
 			"ID": {
-				Type:       "Person.ID",
-				Attributes: []string{"mandatory"},
+				Type: "Person.ID",
 			},
 			"Nationality": {
 				Type: "Person.Nationality",
@@ -170,7 +169,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_EnumField() 
 		Related: map[string]yaml.EntityRelation{},
 	}
 
-	schemas, err := compile.MorpheEntityToZodSchemas(entity, r)
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 
@@ -190,8 +189,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_InvalidRootM
 		Name: "Invalid",
 		Fields: map[string]yaml.EntityField{
 			"ID": {
-				Type:       "NonExistent.ID",
-				Attributes: []string{"mandatory"},
+				Type: "NonExistent.ID",
 			},
 		},
 		Identifiers: map[string]yaml.EntityIdentifier{
@@ -200,7 +198,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_InvalidRootM
 		Related: map[string]yaml.EntityRelation{},
 	}
 
-	schemas, err := compile.MorpheEntityToZodSchemas(entity, r)
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
 
 	suite.Error(err)
 	suite.Nil(schemas)
@@ -241,8 +239,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_AliasedRelat
 		Name: "PersonView",
 		Fields: map[string]yaml.EntityField{
 			"ID": {
-				Type:       "Person.ID",
-				Attributes: []string{"mandatory"},
+				Type: "Person.ID",
 			},
 		},
 		Identifiers: map[string]yaml.EntityIdentifier{
@@ -256,7 +253,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_AliasedRelat
 		},
 	}
 
-	schemas, err := compile.MorpheEntityToZodSchemas(entity, r)
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3) // ID + WorkContactID + WorkContact
@@ -288,8 +285,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_Relationship
 		Name: "Blog",
 		Fields: map[string]yaml.EntityField{
 			"ID": {
-				Type:       "Blog.ID",
-				Attributes: []string{"mandatory"},
+				Type: "Blog.ID",
 			},
 		},
 		Identifiers: map[string]yaml.EntityIdentifier{
@@ -311,7 +307,7 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_Relationship
 		Related: map[string]yaml.ModelRelation{},
 	})
 
-	schemas, err := compile.MorpheEntityToZodSchemas(entity, r)
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schemas[0].Fields, 3) // ID + PostIDs + Posts

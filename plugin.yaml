@@ -20,6 +20,11 @@ output:
     path: "./types"
 
 configSchema:
+  fieldCasing:
+    type: string
+    description: "Field casing for generated schemas. Valid values: camel (default), snake, pascal."
+    enum: ["camel", "snake", "pascal"]
+    default: "camel"
   indentSize:
     type: integer
     default: 2

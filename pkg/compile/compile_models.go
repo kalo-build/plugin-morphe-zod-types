@@ -56,11 +56,11 @@ func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry, fieldCasing
 			return nil, err
 		}
 
-		// Check if field is mandatory
-		isMandatory := false
+		// Fields are required by default; only fields with the "optional" attribute are optional
+		isOptional := false
 		for _, attr := range field.Attributes {
-			if attr == "mandatory" {
-				isMandatory = true
+			if attr == "optional" {
+				isOptional = true
 				break
 			}
 		}
@@ -68,7 +68,7 @@ func MorpheModelToZodSchemas(model yaml.Model, r *registry.Registry, fieldCasing
 		mainSchema.Fields = append(mainSchema.Fields, zoddef.SchemaField{
 			Name:     fieldCasing.Apply(fieldName),
 			ZodType:  zodType,
-			Optional: !isMandatory,
+			Optional: isOptional,
 		})
 	}
 

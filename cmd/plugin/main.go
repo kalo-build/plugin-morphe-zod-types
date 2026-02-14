@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 )
 
 // CompileConfig represents the configuration passed to the plugin
@@ -86,11 +87,17 @@ func main() {
 		compileConfig.OutputPath,
 	)
 
-	// TODO: Parse format-specific configuration from compileConfig.Config
-	// Example:
-	// if indent, ok := compileConfig.Config["indentSize"].(float64); ok {
-	//     morpheConfig.FormatConfig.IndentSize = int(indent)
-	// }
+	// Parse format-specific configuration from compileConfig.Config
+	if indent, ok := compileConfig.Config["indentSize"].(float64); ok {
+		morpheConfig.FormatConfig.IndentSize = int(indent)
+	}
+	if strict, ok := compileConfig.Config["useStrictMode"].(bool); ok {
+		morpheConfig.FormatConfig.UseStrictMode = strict
+	}
+	if casing, ok := compileConfig.Config["fieldCasing"].(string); ok && casing != "" {
+		logInfo(compileConfig.Verbose, "Setting field casing to: %s", casing)
+		morpheConfig.FormatConfig.FieldCasing = cfg.Casing(casing)
+	}
 
 	// Validate configuration
 	if err := morpheConfig.Validate(); err != nil {

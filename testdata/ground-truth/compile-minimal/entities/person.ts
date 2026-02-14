@@ -3,19 +3,19 @@ import { NationalitySchema, type Nationality } from '../enums/nationality'
 import { CompanySchema, type Company } from './company'
 
 export interface Person {
-  email?: string | undefined;
+  email: string;
   id: number;
-  lastName?: string | undefined;
-  nationality?: Nationality | undefined;
+  lastName: string;
+  nationality: Nationality;
   companyID?: number | undefined;
   company?: Company | undefined
 }
 
 export const PersonSchema: z.ZodType<Person> = z.object({
-  email: z.string().optional(),
+  email: z.string(),
   id: z.number(),
-  lastName: z.string().optional(),
-  nationality: NationalitySchema.optional(),
+  lastName: z.string(),
+  nationality: NationalitySchema,
   companyID: z.number().optional(),
   company: z.lazy(() => CompanySchema).optional()
 })

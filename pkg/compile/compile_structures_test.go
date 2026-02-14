@@ -6,6 +6,7 @@ import (
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile"
+	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/zoddef"
 	"github.com/stretchr/testify/suite"
 )
@@ -30,16 +31,16 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_BasicFie
 
 	r := registry.NewRegistry()
 
-	schema, err := compile.MorpheStructureToZodSchema(structure, r)
+	schema, err := compile.MorpheStructureToZodSchema(structure, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.NotNil(schema)
 	suite.Equal("Address", schema.Name)
 	suite.Len(schema.Fields, 3)
 
-	// All structure fields should be optional by default
+	// Structure fields without "optional" attribute should be required
 	for _, field := range schema.Fields {
-		suite.True(field.Optional, "Structure field %s should be optional", field.Name)
+		suite.False(field.Optional, "Structure field %s should be required by default", field.Name)
 	}
 }
 
@@ -60,15 +61,15 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_AllField
 
 	r := registry.NewRegistry()
 
-	schema, err := compile.MorpheStructureToZodSchema(structure, r)
+	schema, err := compile.MorpheStructureToZodSchema(structure, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schema.Fields, 8)
 
-	// Verify field type mappings
+	// Verify field type mappings - all required by default (no optional attribute)
 	for _, field := range schema.Fields {
 		suite.NotNil(field.ZodType)
-		suite.True(field.Optional)
+		suite.False(field.Optional, "Structure field %s should be required by default", field.Name)
 	}
 }
 
@@ -90,7 +91,7 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_EnumFiel
 		},
 	})
 
-	schema, err := compile.MorpheStructureToZodSchema(structure, r)
+	schema, err := compile.MorpheStructureToZodSchema(structure, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schema.Fields, 1)
@@ -104,6 +105,33 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_EnumFiel
 	suite.Equal("ColorTheme", enumRef.EnumName)
 }
 
+func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_OptionalAttribute() {
+	structure := yaml.Structure{
+		Name: "UserResponse",
+		Fields: map[string]yaml.StructureField{
+			"ID":             {Type: yaml.StructureFieldTypeUUID},
+			"Email":          {Type: yaml.StructureFieldTypeString},
+			"OrganizationID": {Type: yaml.StructureFieldTypeUUID, Attributes: []string{"optional"}},
+		},
+	}
+
+	r := registry.NewRegistry()
+
+	schema, err := compile.MorpheStructureToZodSchema(structure, r, cfg.CasingCamel)
+
+	suite.NoError(err)
+	suite.Len(schema.Fields, 3)
+
+	// Find each field and check optionality
+	for _, field := range schema.Fields {
+		if field.Name == "organizationID" {
+			suite.True(field.Optional, "OrganizationID should be optional")
+		} else {
+			suite.False(field.Optional, "Field %s should be required", field.Name)
+		}
+	}
+}
+
 func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_EmptyStructure() {
 	structure := yaml.Structure{
 		Name:   "Empty",
@@ -112,7 +140,7 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_EmptyStr
 
 	r := registry.NewRegistry()
 
-	schema, err := compile.MorpheStructureToZodSchema(structure, r)
+	schema, err := compile.MorpheStructureToZodSchema(structure, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.NotNil(schema)
@@ -129,7 +157,7 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_SingleFi
 
 	r := registry.NewRegistry()
 
-	schema, err := compile.MorpheStructureToZodSchema(structure, r)
+	schema, err := compile.MorpheStructureToZodSchema(structure, r, cfg.CasingCamel)
 
 	suite.NoError(err)
 	suite.Len(schema.Fields, 1)
