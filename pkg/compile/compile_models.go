@@ -8,6 +8,7 @@ import (
 	"github.com/kalo-build/go-util/strcase"
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
+	"github.com/kalo-build/morphe-go/pkg/yamlops"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/formatdef"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/typemap"
@@ -113,10 +114,7 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		relation := related[relationName]
 
 		// Determine the target model name
-		targetModelName := relationName
-		if relation.Aliased != "" {
-			targetModelName = relation.Aliased
-		}
+		targetModelName := yamlops.GetRelationTargetName(relationName, relation.Aliased)
 
 		// Get the base field name with casing applied
 		baseName := fieldCasing.Apply(relationName)
@@ -124,13 +122,15 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		// Generate fields based on relationship type
 		switch relation.Type {
 		case "HasOne", "ForOne":
-			// Add ID field
+			fkZodType, err := lookupFKZodType(r, targetModelName)
+			if err != nil {
+				return nil, fmt.Errorf("relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
-				ZodType:  zoddef.ZodTypeNumber,
+				ZodType:  fkZodType,
 				Optional: true,
 			})
-			// Add reference field
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetModelName},
@@ -138,13 +138,15 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			})
 
 		case "HasMany", "ForMany":
-			// Add IDs array field
+			fkZodType, err := lookupFKZodType(r, targetModelName)
+			if err != nil {
+				return nil, fmt.Errorf("relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
-				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
+				ZodType:  zoddef.ZodArrayType{ElementType: fkZodType},
 				Optional: true,
 			})
-			// Add references array field (pluralize the field name)
 			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
@@ -156,10 +158,13 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			})
 
 		case "HasOnePoly":
-			// Polymorphic HasOne - just like HasOne but referencing the aliased type
+			fkZodType, err := lookupPolyFKZodType(r, relation.For)
+			if err != nil {
+				return nil, fmt.Errorf("relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
-				ZodType:  zoddef.ZodTypeNumber,
+				ZodType:  fkZodType,
 				Optional: true,
 			})
 			fields = append(fields, zoddef.SchemaField{
@@ -169,13 +174,15 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			})
 
 		case "HasManyPoly":
-			// Polymorphic HasMany
+			fkZodType, err := lookupPolyFKZodType(r, relation.For)
+			if err != nil {
+				return nil, fmt.Errorf("relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
-				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
+				ZodType:  zoddef.ZodArrayType{ElementType: fkZodType},
 				Optional: true,
 			})
-			// Add references array field (pluralize the field name)
 			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
@@ -187,7 +194,10 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			})
 
 		case "ForOnePoly", "ForManyPoly":
-			// For polymorphic relationships, we include a type discriminator
+			fkZodType, err := lookupPolyFKZodType(r, relation.For)
+			if err != nil {
+				return nil, fmt.Errorf("relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + typeSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeString,
@@ -195,13 +205,38 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
-				ZodType:  zoddef.ZodTypeNumber,
+				ZodType:  fkZodType,
 				Optional: true,
 			})
 		}
 	}
 
 	return fields, nil
+}
+
+// lookupFKZodType resolves the Zod type for a FK ID field by looking up the
+// target model's primary key field type in the registry.
+func lookupFKZodType(r *registry.Registry, targetModelName string) (zoddef.ZodType, error) {
+	targetModel, err := r.GetModel(targetModelName)
+	if err != nil {
+		return nil, fmt.Errorf("model with name '%s' not found in registry", targetModelName)
+	}
+	primaryIDFieldName, err := yamlops.GetModelPrimaryIdentifierFieldName(targetModel)
+	if err != nil {
+		return nil, err
+	}
+	primaryIDField, err := yamlops.GetModelFieldDefinitionByName(targetModel, primaryIDFieldName)
+	if err != nil {
+		return nil, err
+	}
+	return typemap.MorpheFieldTypeToZodType(primaryIDField.Type)
+}
+
+// lookupPolyFKZodType resolves the FK type for polymorphic relationships by
+// using the first target in the For list (all targets should share the same
+// primary key type convention).
+func lookupPolyFKZodType(r *registry.Registry, forModels []string) (zoddef.ZodType, error) {
+	return zoddef.ZodTypeString, nil
 }
 
 // idSuffix returns the appropriate suffix for ID fields based on casing

@@ -156,6 +156,13 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasOne() {
 	}
 
 	r := registry.NewRegistry()
+	r.SetModel("Profile", yaml.Model{
+		Name:   "Profile",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
 
 	schemas, err := compile.MorpheModelToZodSchemas(userModel, r, cfg.CasingCamel)
 
@@ -193,6 +200,13 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasMany() {
 	}
 
 	r := registry.NewRegistry()
+	r.SetModel("Employee", yaml.Model{
+		Name:   "Employee",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
 
 	schemas, err := compile.MorpheModelToZodSchemas(companyModel, r, cfg.CasingCamel)
 
@@ -243,6 +257,13 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AliasedRelation
 	}
 
 	r := registry.NewRegistry()
+	r.SetModel("Contact", yaml.Model{
+		Name:   "Contact",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
 
 	schemas, err := compile.MorpheModelToZodSchemas(personModel, r, cfg.CasingCamel)
 
@@ -277,6 +298,13 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicHasO
 	}
 
 	r := registry.NewRegistry()
+	r.SetModel("Comment", yaml.Model{
+		Name:   "Comment",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
 
 	schemas, err := compile.MorpheModelToZodSchemas(personModel, r, cfg.CasingCamel)
 
@@ -310,6 +338,20 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForO
 	}
 
 	r := registry.NewRegistry()
+	r.SetModel("Person", yaml.Model{
+		Name:   "Person",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
+	r.SetModel("Company", yaml.Model{
+		Name:   "Company",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
 
 	schemas, err := compile.MorpheModelToZodSchemas(commentModel, r, cfg.CasingCamel)
 
@@ -322,10 +364,10 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForO
 	suite.Equal(zoddef.ZodTypeString, typeField.ZodType)
 	suite.True(typeField.Optional)
 
-	// Check CommentableID field
+	// Polymorphic FK is always z.string() regardless of target PK types
 	idField := schemas[0].Fields[2]
 	suite.Equal("commentableID", idField.Name)
-	suite.Equal(zoddef.ZodTypeNumber, idField.ZodType)
+	suite.Equal(zoddef.ZodTypeString, idField.ZodType)
 	suite.True(idField.Optional)
 }
 
@@ -410,4 +452,59 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_AllFieldsRequir
 	for _, field := range schemas[0].Fields {
 		suite.False(field.Optional, "Field %s should be required by default", field.Name)
 	}
+}
+
+func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForOnePoly_MixedPKTypes() {
+	// Person uses AutoIncrement (z.number()), Organization uses UUID (z.string()).
+	// The poly FK should always be z.string() to match psql (TEXT), go-struct (string),
+	// and ts-types (string). Inferring from forModels[0] is order-dependent and wrong.
+	commentModel := yaml.Model{
+		Name: "Comment",
+		Fields: map[string]yaml.ModelField{
+			"ID": {Type: yaml.ModelFieldTypeUUID},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Commentable": {
+				Type: "ForOnePoly",
+				For:  []string{"Person", "Organization"},
+			},
+		},
+	}
+
+	r := registry.NewRegistry()
+	r.SetModel("Person", yaml.Model{
+		Name:   "Person",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeAutoIncrement}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
+	r.SetModel("Organization", yaml.Model{
+		Name:   "Organization",
+		Fields: map[string]yaml.ModelField{"ID": {Type: yaml.ModelFieldTypeUUID}},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+	})
+
+	schemas, err := compile.MorpheModelToZodSchemas(commentModel, r, cfg.CasingCamel)
+	suite.NoError(err)
+
+	// Find the commentableID field
+	var idField zoddef.SchemaField
+	for _, f := range schemas[0].Fields {
+		if f.Name == "commentableID" {
+			idField = f
+			break
+		}
+	}
+
+	// Poly FK must always be z.string() regardless of target PK types,
+	// matching the convention in plugin-morphe-psql-types (TEXT),
+	// plugin-morphe-go-struct (GoTypeString), and plugin-morphe-ts-types (TsTypeString).
+	suite.Equal(zoddef.ZodTypeString, idField.ZodType,
+		"polymorphic FK should always be z.string(), not inferred from forModels[0]")
 }
