@@ -147,6 +147,15 @@ func getZodTypeForEntityField(field yaml.EntityField, r *registry.Registry) (zod
 	return nil, fmt.Errorf("could not resolve entity field type: %s", field.Type)
 }
 
+func hasAttribute(attributes []string, attr string) bool {
+	for _, a := range attributes {
+		if a == attr {
+			return true
+		}
+	}
+	return false
+}
+
 // getEntityRelationshipFields generates fields for entity relationships
 func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *registry.Registry, fieldCasing cfg.Casing) ([]zoddef.SchemaField, error) {
 	fields := []zoddef.SchemaField{}
@@ -171,13 +180,13 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 			// Add reference field
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetEntityName},
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 
 		case "HasMany", "ForMany":
@@ -185,7 +194,7 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 			// Add references array field (pluralize the field name)
 			pluralName := baseName
@@ -195,26 +204,26 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			fields = append(fields, zoddef.SchemaField{
 				Name:     pluralName,
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodLazyType{TypeName: targetEntityName}},
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 
 		case "HasOnePoly":
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetEntityName},
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 
 		case "HasManyPoly":
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 			// Add references array field (pluralize the field name)
 			pluralName := baseName
@@ -224,19 +233,19 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			fields = append(fields, zoddef.SchemaField{
 				Name:     pluralName,
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodLazyType{TypeName: targetEntityName}},
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 
 		case "ForOnePoly", "ForManyPoly":
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + typeSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeString,
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeNumber,
-				Optional: true,
+				Optional: hasAttribute(relation.Attributes, "optional"),
 			})
 		}
 	}
