@@ -7,8 +7,8 @@ export interface Person {
   id: number;
   lastName: string;
   nationality: Nationality;
-  companyID?: number | undefined;
-  company?: Company | undefined
+  companyID: number;
+  company: Company
 }
 
 export const PersonSchema: z.ZodType<Person> = z.object({
@@ -16,8 +16,8 @@ export const PersonSchema: z.ZodType<Person> = z.object({
   id: z.number(),
   lastName: z.string(),
   nationality: NationalitySchema,
-  companyID: z.number().optional(),
-  company: z.lazy(() => CompanySchema).optional()
+  companyID: z.number(),
+  company: z.lazy(() => CompanySchema)
 })
 
 export const PersonIDPrimarySchema = z.object({

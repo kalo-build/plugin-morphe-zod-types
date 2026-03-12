@@ -5,16 +5,16 @@ export interface Company {
   id: number;
   name: string;
   taxID: string;
-  personIDs?: number[] | undefined;
-  persons?: Person[] | undefined
+  personIDs: number[];
+  persons: Person[]
 }
 
 export const CompanySchema: z.ZodType<Company> = z.object({
   id: z.number(),
   name: z.string(),
   taxID: z.string(),
-  personIDs: z.number().array().optional(),
-  persons: z.lazy(() => PersonSchema).array().optional()
+  personIDs: z.number().array(),
+  persons: z.lazy(() => PersonSchema).array()
 })
 
 export const CompanyIDPrimarySchema = z.object({
