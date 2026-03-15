@@ -164,3 +164,40 @@ func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_SingleFi
 	suite.Equal("value", schema.Fields[0].Name)
 	suite.Equal(zoddef.ZodTypeString, schema.Fields[0].ZodType)
 }
+
+func (suite *CompileStructuresTestSuite) TestMorpheStructureToZodSchema_StructureComposition() {
+	lineItemStructure := yaml.Structure{
+		Name: "InvoiceLineItem",
+		Fields: map[string]yaml.StructureField{
+			"Amount": {Type: yaml.StructureFieldTypeInteger},
+		},
+	}
+	invoiceStructure := yaml.Structure{
+		Name: "Invoice",
+		Fields: map[string]yaml.StructureField{
+			"ID":        {Type: yaml.StructureFieldTypeString},
+			"LineItem": {Type: "InvoiceLineItem", Attributes: []string{"optional"}},
+		},
+	}
+
+	r := registry.NewRegistry()
+	r.SetStructure("InvoiceLineItem", lineItemStructure)
+	r.SetStructure("Invoice", invoiceStructure)
+
+	schema, err := compile.MorpheStructureToZodSchema(invoiceStructure, r, cfg.CasingCamel)
+
+	suite.NoError(err)
+	suite.NotNil(schema)
+	suite.Equal("Invoice", schema.Name)
+	suite.Len(schema.Fields, 2)
+
+	suite.Equal("id", schema.Fields[0].Name)
+	suite.Equal(zoddef.ZodTypeString, schema.Fields[0].ZodType)
+	suite.False(schema.Fields[0].Optional)
+
+	suite.Equal("lineItem", schema.Fields[1].Name)
+	suite.True(schema.Fields[1].Optional)
+	schemaRef, ok := schema.Fields[1].ZodType.(zoddef.ZodSchemaRefType)
+	suite.True(ok, "LineItem should be ZodSchemaRefType")
+	suite.Equal("InvoiceLineItem", schemaRef.SchemaName)
+}

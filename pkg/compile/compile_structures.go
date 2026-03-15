@@ -130,6 +130,11 @@ func getZodTypeForStructureField(field yaml.StructureField, r *registry.Registry
 		return zoddef.ZodEnumRefType{EnumName: string(field.Type)}, nil
 	}
 
+	// Structure composition: field type references another structure
+	if _, exists := r.GetAllStructures()[string(field.Type)]; exists {
+		return zoddef.ZodSchemaRefType{SchemaName: string(field.Type)}, nil
+	}
+
 	// Otherwise, map the primitive type
 	return typemap.MorpheStructureFieldTypeToZodType(field.Type)
 }
