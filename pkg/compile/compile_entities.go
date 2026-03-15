@@ -8,6 +8,7 @@ import (
 	"github.com/kalo-build/go-util/strcase"
 	"github.com/kalo-build/morphe-go/pkg/registry"
 	"github.com/kalo-build/morphe-go/pkg/yaml"
+	"github.com/kalo-build/morphe-go/pkg/yamlops"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/compile/cfg"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/formatdef"
 	"github.com/kalo-build/plugin-morphe-zod-types/pkg/typemap"
@@ -156,6 +157,24 @@ func hasAttribute(attributes []string, attr string) bool {
 	return false
 }
 
+// lookupEntityFKZodType resolves the Zod type for an entity FK field by
+// resolving the target entity's primary identifier through its indirected model path.
+func lookupEntityFKZodType(r *registry.Registry, targetEntityName string) (zoddef.ZodType, error) {
+	targetEntity, err := r.GetEntity(targetEntityName)
+	if err != nil {
+		return nil, fmt.Errorf("entity with name '%s' not found in registry", targetEntityName)
+	}
+	primaryIDFieldName, err := yamlops.GetEntityPrimaryIdentifierFieldName(targetEntity)
+	if err != nil {
+		return nil, err
+	}
+	primaryIDField, exists := targetEntity.Fields[primaryIDFieldName]
+	if !exists {
+		return nil, fmt.Errorf("primary identifier field '%s' not found on entity '%s'", primaryIDFieldName, targetEntityName)
+	}
+	return getZodTypeForEntityField(primaryIDField, r)
+}
+
 // getEntityRelationshipFields generates fields for entity relationships
 func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *registry.Registry, fieldCasing cfg.Casing) ([]zoddef.SchemaField, error) {
 	fields := []zoddef.SchemaField{}
@@ -164,39 +183,41 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 	for _, relationName := range relationNames {
 		relation := related[relationName]
 
-		// Determine the target entity name
 		targetEntityName := relationName
 		if relation.Aliased != "" {
 			targetEntityName = relation.Aliased
 		}
 
-		// Get the base field name with casing applied
 		baseName := fieldCasing.Apply(relationName)
+		isOptional := hasAttribute(relation.Attributes, "optional")
 
-		// Generate fields based on relationship type
 		switch relation.Type {
 		case "HasOne", "ForOne":
-			// Add ID field
+			fkZodType, err := lookupEntityFKZodType(r, targetEntityName)
+			if err != nil {
+				return nil, fmt.Errorf("entity relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
-				ZodType:  zoddef.ZodTypeNumber,
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				ZodType:  fkZodType,
+				Optional: isOptional,
 			})
-			// Add reference field
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetEntityName},
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				Optional: true,
 			})
 
 		case "HasMany", "ForMany":
-			// Add IDs array field
+			fkZodType, err := lookupEntityFKZodType(r, targetEntityName)
+			if err != nil {
+				return nil, fmt.Errorf("entity relationship %q: %w", relationName, err)
+			}
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
-				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				ZodType:  zoddef.ZodArrayType{ElementType: fkZodType},
+				Optional: isOptional,
 			})
-			// Add references array field (pluralize the field name)
 			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
@@ -204,28 +225,27 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			fields = append(fields, zoddef.SchemaField{
 				Name:     pluralName,
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodLazyType{TypeName: targetEntityName}},
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				Optional: true,
 			})
 
 		case "HasOnePoly":
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
-				ZodType:  zoddef.ZodTypeNumber,
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				ZodType:  zoddef.ZodTypeString,
+				Optional: isOptional,
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
 				ZodType:  zoddef.ZodLazyType{TypeName: targetEntityName},
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				Optional: true,
 			})
 
 		case "HasManyPoly":
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
-				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeNumber},
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodTypeString},
+				Optional: isOptional,
 			})
-			// Add references array field (pluralize the field name)
 			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
 				pluralName += "s"
@@ -233,19 +253,19 @@ func getEntityRelationshipFields(related map[string]yaml.EntityRelation, r *regi
 			fields = append(fields, zoddef.SchemaField{
 				Name:     pluralName,
 				ZodType:  zoddef.ZodArrayType{ElementType: zoddef.ZodLazyType{TypeName: targetEntityName}},
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				Optional: true,
 			})
 
 		case "ForOnePoly", "ForManyPoly":
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + typeSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeString,
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				Optional: isOptional,
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
-				ZodType:  zoddef.ZodTypeNumber,
-				Optional: hasAttribute(relation.Attributes, "optional"),
+				ZodType:  zoddef.ZodTypeString,
+				Optional: isOptional,
 			})
 		}
 	}
@@ -267,15 +287,15 @@ func getEntityIdentifierSchemas(entity yaml.Entity, mainSchema *zoddef.Schema, f
 			Fields:  []zoddef.SchemaField{},
 		}
 
-		// Add fields from the identifier
 		for _, fieldName := range identifier.Fields {
-			casedFieldName := fieldCasing.Apply(fieldName)
+			targetFieldNames := resolveEntityIdentifierFieldNames(fieldName, entity.Related, fieldCasing)
 
-			// Find the field in the main schema
-			for _, field := range mainSchema.Fields {
-				if field.Name == casedFieldName {
-					idSchema.Fields = append(idSchema.Fields, field)
-					break
+			for _, targetName := range targetFieldNames {
+				for _, field := range mainSchema.Fields {
+					if field.Name == targetName {
+						idSchema.Fields = append(idSchema.Fields, field)
+						break
+					}
 				}
 			}
 		}
@@ -286,6 +306,30 @@ func getEntityIdentifierSchemas(entity yaml.Entity, mainSchema *zoddef.Schema, f
 	}
 
 	return schemas, nil
+}
+
+func resolveEntityIdentifierFieldNames(fieldName string, related map[string]yaml.EntityRelation, fieldCasing cfg.Casing) []string {
+	if !strings.HasPrefix(fieldName, "rel:") {
+		return []string{fieldCasing.Apply(fieldName)}
+	}
+
+	relationName := strings.TrimPrefix(fieldName, "rel:")
+	baseName := fieldCasing.Apply(relationName)
+
+	relation, exists := related[relationName]
+	if !exists {
+		return nil
+	}
+
+	relationType := string(relation.Type)
+	if yamlops.IsRelationPolyFor(relationType) {
+		return []string{
+			baseName + typeSuffix(fieldCasing),
+			baseName + idSuffix(fieldCasing),
+		}
+	}
+
+	return []string{baseName + idSuffix(fieldCasing)}
 }
 
 // generateZodEntityContent generates the TypeScript file content for entity Zod schemas

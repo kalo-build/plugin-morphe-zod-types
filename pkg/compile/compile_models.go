@@ -120,6 +120,8 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 		baseName := fieldCasing.Apply(relationName)
 
 		// Generate fields based on relationship type
+		isOptional := hasAttribute(relation.Attributes, "optional")
+
 		switch relation.Type {
 		case "HasOne", "ForOne":
 			fkZodType, err := lookupFKZodType(r, targetModelName)
@@ -129,7 +131,7 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  fkZodType,
-				Optional: true,
+				Optional: isOptional,
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
@@ -145,7 +147,7 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: fkZodType},
-				Optional: true,
+				Optional: isOptional,
 			})
 			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
@@ -165,7 +167,7 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  fkZodType,
-				Optional: true,
+				Optional: isOptional,
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName,
@@ -181,7 +183,7 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idsSuffix(fieldCasing),
 				ZodType:  zoddef.ZodArrayType{ElementType: fkZodType},
-				Optional: true,
+				Optional: isOptional,
 			})
 			pluralName := baseName
 			if !strings.HasSuffix(pluralName, "s") {
@@ -201,12 +203,12 @@ func getRelationshipFields(related map[string]yaml.ModelRelation, r *registry.Re
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + typeSuffix(fieldCasing),
 				ZodType:  zoddef.ZodTypeString,
-				Optional: true,
+				Optional: isOptional,
 			})
 			fields = append(fields, zoddef.SchemaField{
 				Name:     baseName + idSuffix(fieldCasing),
 				ZodType:  fkZodType,
-				Optional: true,
+				Optional: isOptional,
 			})
 		}
 	}
@@ -283,15 +285,15 @@ func getIdentifierSchemas(model yaml.Model, mainSchema *zoddef.Schema, fieldCasi
 			Fields:  []zoddef.SchemaField{},
 		}
 
-		// Add fields from the identifier
 		for _, fieldName := range identifier.Fields {
-			casedFieldName := fieldCasing.Apply(fieldName)
+			targetFieldNames := resolveModelIdentifierFieldNames(fieldName, model.Related, fieldCasing)
 
-			// Find the field in the main schema
-			for _, field := range mainSchema.Fields {
-				if field.Name == casedFieldName {
-					idSchema.Fields = append(idSchema.Fields, field)
-					break
+			for _, targetName := range targetFieldNames {
+				for _, field := range mainSchema.Fields {
+					if field.Name == targetName {
+						idSchema.Fields = append(idSchema.Fields, field)
+						break
+					}
 				}
 			}
 		}
@@ -302,6 +304,30 @@ func getIdentifierSchemas(model yaml.Model, mainSchema *zoddef.Schema, fieldCasi
 	}
 
 	return schemas, nil
+}
+
+func resolveModelIdentifierFieldNames(fieldName string, related map[string]yaml.ModelRelation, fieldCasing cfg.Casing) []string {
+	if !strings.HasPrefix(fieldName, "rel:") {
+		return []string{fieldCasing.Apply(fieldName)}
+	}
+
+	relationName := strings.TrimPrefix(fieldName, "rel:")
+	baseName := fieldCasing.Apply(relationName)
+
+	relation, exists := related[relationName]
+	if !exists {
+		return nil
+	}
+
+	relationType := string(relation.Type)
+	if yamlops.IsRelationPolyFor(relationType) {
+		return []string{
+			baseName + typeSuffix(fieldCasing),
+			baseName + idSuffix(fieldCasing),
+		}
+	}
+
+	return []string{baseName + idSuffix(fieldCasing)}
 }
 
 // generateZodModelContent generates the TypeScript file content for model Zod schemas

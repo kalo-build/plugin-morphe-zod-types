@@ -4,14 +4,14 @@ import { PersonSchema, type Person } from './person'
 export interface ContactInfo {
   email: string;
   id: number;
-  personID?: number | undefined;
+  personID: number;
   person?: Person | undefined
 }
 
 export const ContactInfoSchema: z.ZodType<ContactInfo> = z.object({
   email: z.string(),
   id: z.number(),
-  personID: z.number().optional(),
+  personID: z.number(),
   person: z.lazy(() => PersonSchema).optional()
 })
 

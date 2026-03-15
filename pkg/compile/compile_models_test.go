@@ -172,7 +172,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasOne() {
 	// Check ProfileID field
 	profileIDField := schemas[0].Fields[1]
 	suite.Equal("profileID", profileIDField.Name)
-	suite.True(profileIDField.Optional)
+	suite.False(profileIDField.Optional)
 	suite.Equal(zoddef.ZodTypeNumber, profileIDField.ZodType)
 
 	// Check Profile field
@@ -216,7 +216,7 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_HasMany() {
 	// Check EmployeeIDs field
 	employeeIDsField := schemas[0].Fields[1]
 	suite.Equal("employeeIDs", employeeIDsField.Name)
-	suite.True(employeeIDsField.Optional)
+	suite.False(employeeIDsField.Optional)
 
 	arrayType, ok := employeeIDsField.ZodType.(zoddef.ZodArrayType)
 	suite.True(ok)
@@ -362,13 +362,13 @@ func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_PolymorphicForO
 	typeField := schemas[0].Fields[1]
 	suite.Equal("commentableType", typeField.Name)
 	suite.Equal(zoddef.ZodTypeString, typeField.ZodType)
-	suite.True(typeField.Optional)
+	suite.False(typeField.Optional)
 
 	// Polymorphic FK is always z.string() regardless of target PK types
 	idField := schemas[0].Fields[2]
 	suite.Equal("commentableID", idField.Name)
 	suite.Equal(zoddef.ZodTypeString, idField.ZodType)
-	suite.True(idField.Optional)
+	suite.False(idField.Optional)
 }
 
 func (suite *CompileModelsTestSuite) TestMorpheModelToZodSchemas_MultipleIdentifiers() {

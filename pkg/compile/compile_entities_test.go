@@ -219,6 +219,17 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_AliasedRelat
 		Related: map[string]yaml.ModelRelation{},
 	})
 
+	r.SetEntity("Contact", yaml.Entity{
+		Name: "Contact",
+		Fields: map[string]yaml.EntityField{
+			"ID": {Type: "Contact.ID"},
+		},
+		Identifiers: map[string]yaml.EntityIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.EntityRelation{},
+	})
+
 	r.SetModel("Person", yaml.Model{
 		Name: "Person",
 		Fields: map[string]yaml.ModelField{
@@ -281,6 +292,17 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_Relationship
 		Related: map[string]yaml.ModelRelation{},
 	})
 
+	r.SetEntity("Post", yaml.Entity{
+		Name: "Post",
+		Fields: map[string]yaml.EntityField{
+			"ID": {Type: "Post.ID"},
+		},
+		Identifiers: map[string]yaml.EntityIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.EntityRelation{},
+	})
+
 	entity := yaml.Entity{
 		Name: "Blog",
 		Fields: map[string]yaml.EntityField{
@@ -323,4 +345,74 @@ func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_Relationship
 	// Check Posts array (pluralized)
 	postsField := schemas[0].Fields[2]
 	suite.Equal("posts", postsField.Name)
+}
+
+func (suite *CompileEntitiesTestSuite) TestMorpheEntityToZodSchemas_RelationToUUIDEntity() {
+	r := registry.NewRegistry()
+
+	r.SetModel("Organization", yaml.Model{
+		Name: "Organization",
+		Fields: map[string]yaml.ModelField{
+			"ID":   {Type: yaml.ModelFieldTypeUUID},
+			"Name": {Type: yaml.ModelFieldTypeString},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Invoice": {Type: "HasMany"},
+		},
+	})
+
+	r.SetEntity("Organization", yaml.Entity{
+		Name: "Organization",
+		Fields: map[string]yaml.EntityField{
+			"ID":   {Type: "Organization.ID"},
+			"Name": {Type: "Organization.Name"},
+		},
+		Identifiers: map[string]yaml.EntityIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.EntityRelation{},
+	})
+
+	r.SetModel("Invoice", yaml.Model{
+		Name: "Invoice",
+		Fields: map[string]yaml.ModelField{
+			"ID":            {Type: yaml.ModelFieldTypeUUID},
+			"InvoiceNumber": {Type: yaml.ModelFieldTypeString},
+		},
+		Identifiers: map[string]yaml.ModelIdentifier{
+			"primary": {Fields: []string{"ID"}},
+		},
+		Related: map[string]yaml.ModelRelation{
+			"Organization": {Type: "ForOne"},
+		},
+	})
+
+	entity := yaml.Entity{
+		Name: "Invoice",
+		Fields: map[string]yaml.EntityField{
+			"ID":            {Type: "Invoice.ID"},
+			"InvoiceNumber": {Type: "Invoice.InvoiceNumber"},
+		},
+		Identifiers: map[string]yaml.EntityIdentifier{
+			"primary":       {Fields: []string{"ID"}},
+			"invoiceNumber": {Fields: []string{"InvoiceNumber"}},
+		},
+		Related: map[string]yaml.EntityRelation{
+			"Organization": {Type: "ForOne"},
+		},
+	}
+
+	schemas, err := compile.MorpheEntityToZodSchemas(entity, r, cfg.CasingCamel)
+
+	suite.NoError(err)
+	suite.Len(schemas[0].Fields, 4) // ID + InvoiceNumber + OrganizationID + Organization
+
+	// OrganizationID FK should be z.string() since Organization uses UUID
+	orgIDField := schemas[0].Fields[2]
+	suite.Equal("organizationID", orgIDField.Name)
+	suite.Equal(zoddef.ZodTypeString, orgIDField.ZodType,
+		"FK to UUID entity should produce z.string(), not z.number()")
 }
