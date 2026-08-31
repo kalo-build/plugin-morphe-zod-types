@@ -510,7 +510,15 @@ func generateSchemaDefinition(cb *formatdef.ContentBuilder, schema *zoddef.Schem
 	for i, field := range schema.Fields {
 		fieldDef := field.ZodType.GetZodTypeString()
 		if field.Optional {
-			fieldDef += ".optional()"
+			if !hasLazyRefs {
+				if _, isCoerce := field.ZodType.(zoddef.ZodCoerceType); isCoerce {
+					fieldDef = fmt.Sprintf("z.preprocess((v) => v === '' ? undefined : v, %s.optional())", fieldDef)
+				} else {
+					fieldDef += ".optional()"
+				}
+			} else {
+				fieldDef += ".optional()"
+			}
 		}
 
 		line := fmt.Sprintf("%s: %s", field.Name, fieldDef)

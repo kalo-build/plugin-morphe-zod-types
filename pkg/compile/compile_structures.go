@@ -106,9 +106,7 @@ func collectImportsForSchema(schema *zoddef.Schema, currentName string, r *regis
 	for path, names := range importMap {
 		nameSlice := []string{}
 		for name, kind := range names {
-			if kind == importType {
-				nameSlice = append(nameSlice, "type "+name)
-			} else {
+			if kind == importValue {
 				nameSlice = append(nameSlice, name)
 			}
 		}

@@ -107,12 +107,30 @@ func (t ZodLazyType) DeepClone() ZodType {
 	return ZodLazyType{TypeName: t.TypeName}
 }
 
+// ZodCoerceType wraps a primitive type with z.coerce for accepting
+// string inputs (e.g., HTML form fields) and coercing them to the target type.
+type ZodCoerceType struct {
+	Inner ZodPrimitiveType
+}
+
+func (t ZodCoerceType) GetZodTypeString() string {
+	return "z.coerce." + t.Inner.TypeName + "()"
+}
+
+func (t ZodCoerceType) GetTypeScriptType() string {
+	return t.Inner.GetTypeScriptType()
+}
+
+func (t ZodCoerceType) DeepClone() ZodType {
+	return ZodCoerceType{Inner: ZodPrimitiveType{TypeName: t.Inner.TypeName}}
+}
+
 // Common Zod types
 var (
 	ZodTypeString  = ZodPrimitiveType{TypeName: "string"}
 	ZodTypeNumber  = ZodPrimitiveType{TypeName: "number"}
 	ZodTypeBoolean = ZodPrimitiveType{TypeName: "boolean"}
-	ZodTypeDate    = ZodPrimitiveType{TypeName: "date"}
+	ZodTypeDate    = ZodCoerceType{Inner: ZodPrimitiveType{TypeName: "date"}}
 	ZodTypeAny     = ZodPrimitiveType{TypeName: "any"}
 )
 
